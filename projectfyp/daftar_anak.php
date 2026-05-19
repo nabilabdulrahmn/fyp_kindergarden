@@ -1,198 +1,219 @@
 <?php
-include 'db.php';
+// daftar_anak.php
+session_start();
+require 'db.php';
 
-if (isset($_POST['submit'])) {
-    $username   = $_POST['username'];
-    $password   = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $nama_ibubapa   = $_POST['nama_ibubapa'];
-    $no_ic          = $_POST['no_ic'];
-    $no_telefon     = $_POST['no_telefon'];
-    $alamat         = $_POST['alamat'];
-    $nama_anak      = $_POST['nama_anak'];
-    $no_mykid       = $_POST['no_mykid'];
-    $tarikh_lahir   = $_POST['tarikh_lahir'];
-    $program        = $_POST['program'];
-    $masalah_kesihatan = $_POST['masalah_kesihatan'];
-    $status = 'Pending';
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'parent') {
+    header("Location: login.php");
+    exit();
+}
 
-    $sql = "INSERT INTO enrollments (username, password, nama_ibubapa, no_ic, no_telefon, alamat, nama_anak, no_mykid, tarikh_lahir, program, masalah_kesihatan, status) VALUES ('$username', '$password', '$nama_ibubapa', '$no_ic', '$no_telefon', '$alamat', '$nama_anak', '$no_mykid', '$tarikh_lahir', '$program', '$masalah_kesihatan', '$status')";
+$user_id = $_SESSION['user_id'];
 
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['daftar_pelajar'])) {
+    // Maklumat Anak
+    $nama_penuh = $_POST['full_name'];
+    $mykid = $_POST['mykid'];
+    $modul = $_POST['module'];
+    $kesihatan = $_POST['health_record'];
+    $alahan = $_POST['allergies'];
+    
+    // Alamat Pelajar (Revise Baru)
+    $alamat = $_POST['address'];
+    $poskod = $_POST['postcode'];
+    $negeri = $_POST['state'];
+
+    // Maklumat Ibu Bapa / Penjaga
+    $p_name = $_POST['parent_name'];
+    $p_ic = $_POST['parent_ic'];
+    $p_employer = $_POST['employer_name'];
+    $p_emp_address = $_POST['employer_address'];
+    $p_email = $_POST['parent_email'];
+    $p_phone = $_POST['parent_phone'];
+    
+    // Validasi: Wajib Isi [cite: 61]
+    if(empty($nama_penuh) || empty($mykid) || empty($alamat) || empty($poskod) || empty($negeri)) {
+        echo "<script>alert('Sila pastikan maklumat pelajar dan alamat telah diisi!'); window.history.back();</script>";
+        exit();
+    }
+
+    $target_dir = "uploads/";
+    $mykid_file = $target_dir . time() . "_" . basename($_FILES["file_mykid"]["name"]);
+    move_uploaded_file($_FILES["file_mykid"]["tmp_name"], $mykid_file);
+
+    $kesihatan_file = $target_dir . time() . "_" . basename($_FILES["file_kesihatan"]["name"]);
+    move_uploaded_file($_FILES["file_kesihatan"]["tmp_name"], $kesihatan_file);
+
+    // Dapatkan parent_id dari jadual parents
+    $sql_parent = "SELECT id FROM parents WHERE user_id = $user_id LIMIT 1";
+    $res_parent = $conn->query($sql_parent);
+    if ($res_parent && $res_parent->num_rows > 0) {
+        $parent = $res_parent->fetch_assoc();
+        $parent_id = (int)$parent['id'];
+    } else {
+        // Jika tiada rekod parent, cipta satu rekod baru dalam jadual parents
+        $p_name_esc = $conn->real_escape_string($p_name);
+        $p_ic_esc = $conn->real_escape_string($p_ic);
+        $p_phone_esc = $conn->real_escape_string($p_phone);
+        $alamat_esc = $conn->real_escape_string($alamat);
+        $sql_insert_parent = "INSERT INTO parents (user_id, full_name, ic_number, phone_number, address) 
+                              VALUES ($user_id, '$p_name_esc', '$p_ic_esc', '$p_phone_esc', '$alamat_esc')";
+        if ($conn->query($sql_insert_parent)) {
+            $parent_id = $conn->insert_id;
+        } else {
+            echo "<script>alert('Ralat membuat profil penjaga: " . $conn->error . "'); window.history.back();</script>";
+            exit();
+        }
+    }
+
+    // SQL INSERT yang telah dikemaskini dengan parent_id (bukan user_id)
+    $sql = "INSERT INTO students (parent_id, full_name, mykid_number, module, health_record, allergies, 
+            address, postcode, state,
+            parent_name, parent_ic, parent_phone, parent_email, employer_name, employer_address) 
+            VALUES ('$parent_id', '$nama_penuh', '$mykid', '$modul', '$kesihatan', '$alahan', 
+            '$alamat', '$poskod', '$negeri',
+            '$p_name', '$p_ic', '$p_phone', '$p_email', '$p_employer', '$p_emp_address')";
+            
     if ($conn->query($sql) === TRUE) {
-        echo "<script>alert('Pendaftaran berjaya. Menunggu kelulusan Admin.'); window.location.href='login.php';</script>";
+        if (function_exists('catat_log')) {
+            catat_log($conn, $user_id, $_SESSION['username'], "Mendaftarkan pelajar baru: $nama_penuh", "Success");
+        }
+        echo "<script>alert('Pendaftaran berjaya dihantar!'); window.location.href='home.php';</script>";
     } else {
         echo "<script>alert('Ralat: " . $conn->error . "');</script>";
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pendaftaran Baru - Sistem Pengurusan Kanak-Kanak</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter','Segoe UI',sans-serif;min-height:100vh;background:linear-gradient(135deg,#fce4ec 0%,#e8eaf6 50%,#e3f2fd 100%);display:flex;justify-content:center;align-items:flex-start;padding:40px 20px}
-body::before,body::after{content:'';position:fixed;border-radius:50%;opacity:.08;z-index:0;animation:floatB 20s ease-in-out infinite}
-body::before{width:400px;height:400px;background:#f48fb1;top:-100px;right:-100px}
-body::after{width:300px;height:300px;background:#90caf9;bottom:-80px;left:-80px;animation-delay:-10s}
-@keyframes floatB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,40px) scale(1.1)}}
-
-.form-wrapper{width:100%;max-width:720px;position:relative;z-index:1}
-
-.form-header{background:linear-gradient(135deg,#f8bbd0,#bbdefb);border-radius:20px 20px 0 0;padding:35px 40px;text-align:center;position:relative;overflow:hidden}
-.form-header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f48fb1,#90caf9,#f48fb1);background-size:200% 100%;animation:shimmer 3s linear infinite}
-@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.form-header .emoji-icon{font-size:48px;margin-bottom:10px;display:block;animation:bounce 2s ease-in-out infinite}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.form-header h1{font-size:26px;font-weight:700;color:#37474f;margin-bottom:6px}
-.form-header p{font-size:14px;color:#546e7a}
-
-.form-body{background:rgba(255,255,255,.92);backdrop-filter:blur(20px);border-radius:0 0 20px 20px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.04)}
-
-.section-title{display:flex;align-items:center;gap:12px;margin-bottom:24px;margin-top:10px}
-.section-title:not(:first-child){margin-top:36px;padding-top:32px;border-top:1px solid #e0e0e0}
-.section-badge{background:linear-gradient(135deg,#f48fb1,#ce93d8);color:#fff;font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;letter-spacing:.5px;white-space:nowrap}
-.section-badge.blue{background:linear-gradient(135deg,#90caf9,#80deea)}
-.section-badge.purple{background:linear-gradient(135deg,#ce93d8,#b39ddb)}
-.section-title h2{font-size:18px;font-weight:600;color:#37474f}
-
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.form-row.single{grid-template-columns:1fr}
-.form-group{margin-bottom:22px}
-.form-group label{display:block;font-size:13px;font-weight:600;color:#455a64;margin-bottom:8px}
-.form-group label .req{color:#ef5350;margin-left:2px}
-
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group input[type="date"],
-.form-group select,
-.form-group textarea{width:100%;padding:13px 16px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;font-family:'Inter',sans-serif;color:#37474f;background:#fafafa;transition:all .3s ease;outline:none}
-.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#f48fb1;background:#fff;box-shadow:0 0 0 4px rgba(244,143,177,.12)}
-.form-group textarea{resize:vertical;min-height:90px}
-.form-group select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23546e7a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
-.form-group .helper{display:block;font-size:11px;color:#90a4ae;margin-top:6px}
-
-.btn-submit{display:block;width:100%;padding:16px;margin-top:32px;border:none;border-radius:14px;font-size:16px;font-weight:700;font-family:'Inter',sans-serif;color:#fff;background:linear-gradient(135deg,#f48fb1,#90caf9);background-size:200% 200%;cursor:pointer;transition:all .4s ease;letter-spacing:.5px}
-.btn-submit:hover{background-position:100% 100%;transform:translateY(-2px);box-shadow:0 8px 25px rgba(244,143,177,.35)}
-.btn-submit:active{transform:translateY(0)}
-
-.back-link{display:block;text-align:center;margin-top:20px;color:#90a4ae;text-decoration:none;font-size:13px;font-weight:500;transition:color .3s}
-.back-link:hover{color:#f48fb1}
-
-@media(max-width:600px){
-.form-row{grid-template-columns:1fr}
-.form-header{padding:25px 20px}
-.form-body{padding:25px 20px}
-.form-header h1{font-size:22px}
-}
-</style>
+    <meta charset="UTF-8">
+    <title>Daftar Pelajar Baru</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #f0f8ff; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
+        .form-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 750px; width: 100%; border-top: 8px solid #84b6f4; }
+        .form-container h2 { color: #84b6f4; text-align: center; margin-top: 0; }
+        .section-title { background: #eef6ff; padding: 10px; border-radius: 5px; color: #444; font-weight: bold; margin: 25px 0 15px 0; border-left: 4px solid #84b6f4; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; color: #444; margin-bottom: 5px; }
+        input[type="text"], input[type="email"], select, textarea, input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .row { display: flex; gap: 15px; }
+        .row .form-group { flex: 1; }
+        button.btn-submit { background-color: #84b6f4; color: white; padding: 15px; border: none; border-radius: 8px; width: 100%; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        .btn-back { display: block; text-align: center; margin-top: 20px; color: #666; text-decoration: none; }
+    </style>
 </head>
 <body>
-<div class="form-wrapper">
 
-<div class="form-header">
-    <span class="emoji-icon">🧒</span>
-    <h1>Pendaftaran Baharu</h1>
-    <p>Sila lengkapkan semua maklumat di bawah untuk pendaftaran</p>
-</div>
+    <div class="form-container">
+        <h2>Pendaftaran Pelajar Baru 🧸</h2>
+        
+        <form method="POST" action="daftar_anak.php" enctype="multipart/form-data">
+            
+            <div class="section-title">A. Maklumat Pelajar</div>
+            <div class="form-group">
+                <label>Nama Penuh Anak</label>
+                <input type="text" name="full_name" required>
+            </div>
+            <div class="form-group">
+                <label>Nombor MyKid</label>
+                <input type="text" name="mykid" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Alamat Rumah</label>
+                <textarea name="address" required placeholder="Alamat lengkap kediaman"></textarea>
+            </div>
+            <div class="row">
+                <div class="form-group">
+                    <label>Poskod</label>
+                    <input type="text" name="postcode" required placeholder="Cth: 06010">
+                </div>
+                <div class="form-group">
+                    <label>Negeri</label>
+                    <select name="state" required>
+                        <option value="">-- Pilih Negeri --</option>
+                        <option value="Kedah">Kedah</option>
+                        <option value="Pulau Pinang">Pulau Pinang</option>
+                        <option value="Perlis">Perlis</option>
+                        <option value="Perak">Perak</option>
+                        <option value="Selangor">Selangor</option>
+                        <option value="Kuala Lumpur">Kuala Lumpur</option>
+                        <option value="Negeri Sembilan">Negeri Sembilan</option>
+                        <option value="Melaka">Melaka</option>
+                        <option value="Johor">Johor</option>
+                        <option value="Pahang">Pahang</option>
+                        <option value="Terengganu">Terengganu</option>
+                        <option value="Kelantan">Kelantan</option>
+                        <option value="Sabah">Sabah</option>
+                        <option value="Sarawak">Sarawak</option>
+                    </select>
+                </div>
+            </div>
 
-<div class="form-body">
-<form method="POST" action="daftar_anak.php">
+            <div class="form-group">
+                <label>Modul / Penempatan Kelas</label>
+                <select name="module" required>
+                    <option value="">-- Sila Pilih --</option>
+                    <option value="Taska">Taska (Childcare)</option>
+                    <option value="Tadika">Tadika (Kindergarten)</option>
+                    <option value="KAFA Care">KAFA Care (Transit)</option>
+                </select>
+            </div>
 
-<!-- BAHAGIAN A -->
-<div class="section-title">
-    <span class="section-badge">BAHAGIAN A</span>
-    <h2>Maklumat Akaun</h2>
-</div>
-<div class="form-row">
-    <div class="form-group">
-        <label>Username <span class="req">*</span></label>
-        <input type="text" name="username" placeholder="Cth: ibu_ali2024" required>
-        <span class="helper">ID log masuk unik anda</span>
-    </div>
-    <div class="form-group">
-        <label>Kata Laluan <span class="req">*</span></label>
-        <input type="password" name="password" placeholder="Minimum 6 aksara" required>
-        <span class="helper">Gunakan kombinasi huruf & nombor</span>
-    </div>
-</div>
+            <div class="section-title">B. Maklumat Ibu Bapa / Penjaga</div>
+            <div class="form-group">
+                <label>Nama Penuh Penjaga</label>
+                <input type="text" name="parent_name" required>
+            </div>
+            <div class="row">
+                <div class="form-group">
+                    <label>No. IC Penjaga</label>
+                    <input type="text" name="parent_ic" required>
+                </div>
+                <div class="form-group">
+                    <label>No. Telefon</label>
+                    <input type="text" name="parent_phone" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Emel</label>
+                <input type="email" name="parent_email" required>
+            </div>
+            <div class="form-group">
+                <label>Nama Majikan</label>
+                <input type="text" name="employer_name" required>
+            </div>
+            <div class="form-group">
+                <label>Alamat Majikan</label>
+                <textarea name="employer_address" required></textarea>
+            </div>
 
-<!-- BAHAGIAN B -->
-<div class="section-title">
-    <span class="section-badge blue">BAHAGIAN B</span>
-    <h2>Maklumat Ibu Bapa / Penjaga</h2>
-</div>
-<div class="form-row">
-    <div class="form-group">
-        <label>Nama Penuh <span class="req">*</span></label>
-        <input type="text" name="nama_ibubapa" placeholder="Cth: Siti Aminah binti Yusof" required>
-    </div>
-    <div class="form-group">
-        <label>No. Kad Pengenalan <span class="req">*</span></label>
-        <input type="text" name="no_ic" placeholder="Cth: 850612-14-5678" required>
-        <span class="helper">Format: XXXXXX-XX-XXXX</span>
-    </div>
-</div>
-<div class="form-row">
-    <div class="form-group">
-        <label>No. Telefon <span class="req">*</span></label>
-        <input type="text" name="no_telefon" placeholder="Cth: 012-3456789" required>
-    </div>
-    <div class="form-group"></div>
-</div>
-<div class="form-row single">
-    <div class="form-group">
-        <label>Alamat Rumah <span class="req">*</span></label>
-        <textarea name="alamat" placeholder="Masukkan alamat penuh termasuk poskod dan negeri..." required></textarea>
-    </div>
-</div>
+            <div class="section-title">C. Rekod Kesihatan & Dokumen</div>
+            <div class="form-group">
+                <label>Rekod Kesihatan Umum</label>
+                <textarea name="health_record"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Alahan (Allergies)</label>
+                <textarea name="allergies"></textarea>
+            </div>
 
-<!-- BAHAGIAN C -->
-<div class="section-title">
-    <span class="section-badge purple">BAHAGIAN C</span>
-    <h2>Maklumat Kanak-Kanak</h2>
-</div>
-<div class="form-row">
-    <div class="form-group">
-        <label>Nama Penuh Anak <span class="req">*</span></label>
-        <input type="text" name="nama_anak" placeholder="Cth: Muhammad Ali bin Ahmad" required>
-    </div>
-    <div class="form-group">
-        <label>No. MyKid <span class="req">*</span></label>
-        <input type="text" name="no_mykid" placeholder="Cth: 200315-14-1234" required>
-        <span class="helper">12 digit nombor MyKid</span>
-    </div>
-</div>
-<div class="form-row">
-    <div class="form-group">
-        <label>Tarikh Lahir <span class="req">*</span></label>
-        <input type="date" name="tarikh_lahir" required>
-    </div>
-    <div class="form-group">
-        <label>Pilihan Program <span class="req">*</span></label>
-        <select name="program" required>
-            <option value="">-- Sila Pilih Program --</option>
-            <option value="Taska">Taska (Awal Kanak-Kanak)</option>
-            <option value="Tadika">Tadika (Prasekolah)</option>
-            <option value="KAFA Care">KAFA Care (Transit & Agama)</option>
-        </select>
-    </div>
-</div>
-<div class="form-row single">
-    <div class="form-group">
-        <label>Masalah Kesihatan / Alahan</label>
-        <textarea name="masalah_kesihatan" placeholder="Nyatakan sebarang alahan makanan, ubat-ubatan, atau masalah kesihatan (jika ada)..."></textarea>
-        <span class="helper">Kosongkan jika tiada masalah kesihatan</span>
-    </div>
-</div>
+            <div class="form-group">
+                <label>Salinan MyKid (JPG/PDF)</label>
+                <input type="file" name="file_mykid" required>
+            </div>
+            <div class="form-group">
+                <label>Rekod Kesihatan / Buku Cucuk</label>
+                <input type="file" name="file_kesihatan" required>
+            </div>
 
-<button type="submit" name="submit" class="btn-submit">📋 Hantar Pendaftaran</button>
-<a href="login.php" class="back-link">⬅ Sudah ada akaun? Kembali ke Log Masuk</a>
+            <button type="submit" name="daftar_pelajar" class="btn-submit">Hantar Pendaftaran</button>
+            <a href="home.php" class="btn-back">⬅️ Kembali ke Dashboard</a>
+            
+        </form>
+    </div>
 
-</form>
-</div>
-</div>
 </body>
 </html>

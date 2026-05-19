@@ -9,23 +9,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['login'])) {
     $pass = $_POST['password'];
 
     $sql = "SELECT * FROM users WHERE username='$user'";
-    $result = mysqli_query($conn, $sql);
+    $result = $conn->query($sql);
 
-    if (mysqli_num_rows($result) > 0) {
-        $row = mysqli_fetch_assoc($result);
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
         if (password_verify($pass, $row['password'])) {
-            // Semak status kelulusan akaun
-            if ($row['status'] == 'pending') {
-                echo "<script>alert('Akaun anda masih menunggu kelulusan admin. Sila tunggu.');</script>";
-            } else if ($row['status'] == 'rejected') {
-                echo "<script>alert('Akaun anda telah ditolak oleh admin.');</script>";
-            } else if ($row['status'] == 'approved') {
-                $_SESSION['user_id'] = $row['id'];
-                $_SESSION['username'] = $row['username'];
-                $_SESSION['role'] = $row['role'];
-                header("Location: home.php");
-                exit();
-            }
+            $_SESSION['user_id'] = $row['id'];
+            $_SESSION['username'] = $row['username'];
+            $_SESSION['role'] = $row['role'];
+            header("Location: home.php");
+            exit();
         } else {
             echo "<script>alert('Password Salah!');</script>";
         }
@@ -41,9 +34,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['register'])) {
     $role = $_POST['role'];
     $hashed_password = password_hash($pass, PASSWORD_DEFAULT);
 
-    $sql = "INSERT INTO users (username, password, role, status) VALUES ('$user', '$hashed_password', '$role', 'pending')";
-    if (mysqli_query($conn, $sql) === TRUE) {
-        echo "<script>alert('Pendaftaran berjaya, sila tunggu kelulusan admin.'); window.location.href='login.php';</script>";
+    $sql = "INSERT INTO users (username, password, role) VALUES ('$user', '$hashed_password', '$role')";
+    if ($conn->query($sql) === TRUE) {
+        echo "<script>alert('Pendaftaran Berjaya! Sila Log Masuk.'); window.location.href='login.php';</script>";
     } else {
         echo "<script>alert('Ralat: Username mungkin sudah wujud.');</script>";
     }
@@ -187,11 +180,11 @@ $mode = isset($_GET['action']) && $_GET['action'] == 'register' ? 'register' : '
         <div class="intro-box">
             <div class="img-placeholder"></div>
             <h3>Mengenai Pusat Penjagaan Kami</h3>
-            <p>Platform bersepadu untuk pengurusan pusat penjagaan kanak-kanak. [cite_start]Beroperasi sejak tahun 2021[cite: 196, 197], menawarkan perkhidmatan:</p>
+            <p>Platform bersepadu untuk pengurusan pusat penjagaan kanak-kanak. Beroperasi sejak tahun 2021, menawarkan perkhidmatan:</p>
             <ul>
-                [cite_start]<li><strong>Taska:</strong> Penjagaan kanak-kanak untuk usia awal[cite: 6, 195].</li>
-                [cite_start]<li><strong>Tadika:</strong> Program prasekolah berasaskan pendidikan[cite: 7, 195].</li>
-                [cite_start]<li><strong>KAFA Care:</strong> Perkhidmatan transit dan pembelajaran agama[cite: 8, 195].</li>
+                <li><strong>Taska:</strong> Penjagaan kanak-kanak untuk usia awal</li>
+                <li><strong>Tadika:</strong> Program prasekolah berasaskan pendidikan</li>
+                <li><strong>KAFA Care:</strong> Perkhidmatan transit dan pembelajaran agama</li>
             </ul>
             <p>Sila log masuk atau daftar akaun baru untuk memulakan urusan pendaftaran, semakan yuran, dan prestasi pelajar.</p>
         </div>
